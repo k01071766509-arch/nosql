@@ -1,0 +1,131 @@
+import psycopg2
+import pandas as pd
+import ipywidgets as widgets
+from IPython.display import display, clear_output
+
+# DB 연결 함수
+def get_conn():
+    return psycopg2.connect(
+        host="aws-1-ap-northeast-1.pooler.supabase.com",
+        port=5432,
+        database="postgres",
+        user="postgres.bpnlhqabfywzlnytshyq",
+        password="rlaehgml28!"
+    )
+
+# 전체 조회 함수
+def load_data():
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM "Teacher" ORDER BY id;')
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return pd.DataFrame(rows, columns=["id", "tea_nm", "tes_age"])
+
+# 화면 새로고침 함수
+def refresh():
+    clear_output()
+
+    df = load_data()
+    display(df)
+
+    if len(df) == 0:
+        print("데이터가 없습니다.")
+        return
+
+    id_dropdown.options = df["id"].tolist()
+    display(id_dropdown)
+    display(name_input)
+    display(age_input)
+    display(update_button)
+    display(delete_button)
+    display(output)
+
+# ID 선택 드롭다운
+id_dropdown = widgets.Dropdown(
+    description="선택 ID:"
+)
+
+# 수정 입력칸
+name_input = widgets.Text(
+    description="이름:"
+)
+
+age_input = widgets.Text(
+    description="나이:"
+)
+
+# 버튼
+update_button = widgets.Button(
+    description="수정하기",
+    button_style="warning"
+)
+
+delete_button = widgets.Button(
+    description="삭제하기",
+    button_style="danger"
+)
+
+output = widgets.Output()
+
+# ID 선택하면 기존 값 자동 입력
+def on_id_change(change):
+    if change["type"] == "change" and change["name"] == "value":
+        df = load_data()
+        selected = df[df["id"] == change["new"]]
+        if len(selected) > 0:
+            name_input.value = selected.iloc[0]["tea_nm"]
+            age_input.value = selected.iloc[0]["tes_age"]
+
+id_dropdown.observe(on_id_change)
+
+# 삭제 기능
+def delete_data(b):
+    with output:
+        clear_output()
+        teacher_id = id_dropdown.value
+
+        conn = get_conn()
+        cur = conn.cursor()
+
+        cur.execute('DELETE FROM "Teacher" WHERE id = %s;', (teacher_id,))
+        conn.commit()
+
+        cur.close()
+        conn.close()
+
+        print(f"{teacher_id} 삭제 완료!")
+
+    refresh()
+
+# 수정 기능
+def update_data(b):
+    with output:
+        clear_output()
+        teacher_id = id_dropdown.value
+
+        conn = get_conn()
+        cur = conn.cursor()
+
+        cur.execute("""
+            UPDATE "Teacher"
+            SET tea_nm = %s,
+                tes_age = %s
+            WHERE id = %s;
+        """, (name_input.value, age_input.value, teacher_id))
+
+        conn.commit()
+
+        cur.close()
+        conn.close()
+
+        print(f"{teacher_id} 수정 완료!")
+
+    refresh()
+
+delete_button.on_click(delete_data)
+update_button.on_click(update_data)
+
+# 실행
+refresh()
